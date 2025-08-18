@@ -60,7 +60,14 @@ public class IdpAdminServiceImpl implements IdpAdminService {
 
     @Override
     public Mono<Void> resetPassword(String username) {
-        return Mono.error(new UnsupportedOperationException("resetPassword not implemented"));
+        return Mono.defer(() -> {
+            try {
+                performResetPassword(username);
+            } catch (Throwable t) {
+                log.error("Error resetting password for user: {}", username, t);
+            }
+            return Mono.empty();
+        });
     }
 
     @Override
@@ -239,6 +246,47 @@ public class IdpAdminServiceImpl implements IdpAdminService {
                     .users()
                     .get(request.getUserId())
                     .resetPassword(newCred);
+        }
+    }
+
+    private void performResetPassword(String username) {
+        log.debug("Resetting password for username: {}", username);
+
+        if (username == null || username.isBlank()) {
+            throw new WebApplicationException("username cannot be null or empty");
+        }
+
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
+
+            List<UserRepresentation> users;
+            try {
+                users = realmResource.users().searchByUsername(username, true);
+            } catch (Throwable t) {
+                users = realmResource.users().search(username, null, null);
+            }
+
+            if (users == null || users.isEmpty()) {
+                throw new WebApplicationException("User not found", 404);
+            }
+
+            UserRepresentation user = users.stream()
+                    .filter(Objects::nonNull)
+                    .filter(u -> username.equalsIgnoreCase(u.getUsername()))
+                    .findFirst()
+                    .orElse(users.get(0));
+
+            UserResource userResource = realmResource.users().get(user.getId());
+
+            try {
+                userResource.executeActionsEmail(List.of("UPDATE_PASSWORD"));
+            } catch (Throwable t) {
+                CredentialRepresentation temp = new CredentialRepresentation();
+                temp.setType(CredentialRepresentation.PASSWORD);
+                temp.setValue(UUID.randomUUID().toString().replace("-", "").substring(0, 12));
+                temp.setTemporary(true);
+                userResource.resetPassword(temp);
+            }
         }
     }
 
