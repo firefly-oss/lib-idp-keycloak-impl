@@ -1,10 +1,13 @@
 package com.catalis.idp.adapter.service.impl;
 
+import com.catalis.idp.adapter.exception.KeycloakExceptionHandler;
 import com.catalis.idp.adapter.keycloak.KeycloakClientFactory;
 import com.catalis.idp.adapter.service.IdpAdminService;
+import com.catalis.idp.adapter.service.TokenService;
 import com.catalis.idp.dtos.*;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
+import lombok.extern.slf4j.Slf4j;
 import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.ClientResource;
@@ -22,86 +25,37 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Service
+@Slf4j
 public class IdpAdminServiceImpl implements IdpAdminService {
 
     private final KeycloakClientFactory keycloakFactory;
+    private final TokenService tokenService;
 
-    public IdpAdminServiceImpl(KeycloakClientFactory keycloakFactory) {
+    public IdpAdminServiceImpl(KeycloakClientFactory keycloakFactory, TokenService tokenService) {
         this.keycloakFactory = keycloakFactory;
+        this.tokenService = tokenService;
     }
 
     @Override
     public Mono<ResponseEntity<CreateUserResponse>> createUser(CreateUserRequest request) {
-        return Mono.fromCallable(() -> {
-            String userId;
-            try (Keycloak keycloak = keycloakFactory.baseClient()) {
-                UserRepresentation user = new UserRepresentation();
-                user.setUsername(request.getUsername());
-                user.setEmail(request.getEmail());
-                user.setEnabled(true);
-
-                Response response = keycloak.realm(keycloakFactory.getRealm()).users().create(user);
-
-                if (response.getStatus() != 201) {
-                    return ResponseEntity
-                            .status(response.getStatus())
-                            .body(null);
-                }
-
-                userId = CreatedResponseUtil.getCreatedId(response);
-
-                CredentialRepresentation credential = new CredentialRepresentation();
-                credential.setType(CredentialRepresentation.PASSWORD);
-                credential.setValue(request.getPassword());
-                credential.setTemporary(false);
-
-                keycloak.realm(keycloakFactory.getRealm())
-                        .users()
-                        .get(userId)
-                        .resetPassword(credential);
-            }
-
-            CreateUserResponse created = new CreateUserResponse(
-                    userId,
-                    request.getUsername(),
-                    request.getEmail(),
-                    Instant.now()
-            );
-            return ResponseEntity.ok(created);
-        });
+        return Mono.fromCallable(() -> performCreateUser(request))
+                .map(ResponseEntity::ok)
+                .onErrorResume(throwable -> {
+                    log.error("Error creating user: {}", request.getUsername(), throwable);
+                    return Mono.just(KeycloakExceptionHandler.handleException(throwable));
+                });
     }
 
     @Override
     public Mono<Void> changePassword(ChangePasswordRequest request) {
-        return Mono.fromRunnable(() -> {
+        return Mono.defer(() -> {
             try {
-                try (Keycloak keycloak = keycloakFactory.passwordClient(getUsernameById(request.getUserId()), request.getOldPassword())) {
-                    AccessTokenResponse tokenResponse = keycloak.tokenManager().getAccessToken();
-                    if (tokenResponse == null || tokenResponse.getToken() == null) {
-                        throw new IllegalArgumentException("Old password is incorrect");
-                    }
-
-                    CredentialRepresentation newCred = new CredentialRepresentation();
-                    newCred.setType(CredentialRepresentation.PASSWORD);
-                    newCred.setValue(request.getNewPassword());
-                    newCred.setTemporary(false);
-
-                    keycloak.realm(keycloakFactory.getRealm())
-                            .users()
-                            .get(request.getUserId())
-                            .resetPassword(newCred);
-                }
-
-            } catch (Exception ex) {
-                throw new RuntimeException("Error changing password: " + ex.getMessage(), ex);
+                performChangePassword(request);
+            } catch (Throwable t) {
+                log.error("Error changing password for user: {}", request.getUserId(), t);
             }
+            return Mono.empty();
         });
-    }
-
-    private String getUsernameById(String userId) {
-        try (Keycloak keycloak = keycloakFactory.baseClient()) {
-            return keycloak.realm(keycloakFactory.getRealm()).users().get(userId).toRepresentation().getUsername();
-        }
     }
 
     @Override
@@ -121,329 +75,450 @@ public class IdpAdminServiceImpl implements IdpAdminService {
 
     @Override
     public Mono<ResponseEntity<List<SessionInfo>>> listSessions(String userId) {
-        return Mono.fromCallable(() -> {
-            try (Keycloak keycloak = keycloakFactory.baseClient()) {
-                RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
-
-                List<UserSessionRepresentation> userSessions =
-                        realmResource.users().get(userId).getUserSessions();
-
-                List<SessionInfo> sessions = userSessions.stream()
-                        .map(session -> {
-                            SessionInfo info = new SessionInfo();
-                            info.setSessionId(session.getId());
-                            info.setUserId(userId);
-                            info.setCreatedAt(Instant.ofEpochMilli(session.getStart()));
-                            info.setLastAccessAt(Instant.ofEpochMilli(session.getLastAccess()));
-                            info.setIpAddress(session.getIpAddress());
-                            return info;
-                        })
-                        .collect(Collectors.toList());
-
-                return ResponseEntity.ok(sessions);
-            } catch (Exception ex) {
-                throw new RuntimeException("Error listing sessions", ex);
-            }
-        });
+        return Mono.fromCallable(() -> performListSessions(userId))
+                .map(ResponseEntity::ok)
+                .onErrorResume(throwable -> {
+                    log.error("Error listing sessions for user: {}", userId, throwable);
+                    return Mono.just(KeycloakExceptionHandler.handleException(throwable));
+                });
     }
 
     @Override
     public Mono<Void> revokeSession(String sessionId) {
-        return Mono.fromRunnable(() -> {
-            try (Keycloak keycloak = keycloakFactory.baseClient()) {
-                RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
-
-                if (sessionId == null || sessionId.isBlank()) {
-                    throw new WebApplicationException("SessionId no puede ser nulo o vacío");
-                }
-                realmResource.deleteSession(sessionId, false);
-
-            } catch (WebApplicationException wae) {
-                throw wae;
-            } catch (Throwable ex) {
-                throw new WebApplicationException("Error revocando la sesión", ex);
+        return Mono.defer(() -> {
+            try {
+                performRevokeSession(sessionId);
+            } catch (Throwable t) {
+                log.error("Error revoking session: {}", sessionId, t);
             }
-        });    }
+            return Mono.empty();
+        });
+    }
 
     @Override
     public Mono<ResponseEntity<List<String>>> getRoles(String userId) {
-        return Mono.fromCallable(() -> {
-                    UserResource userResource;
-                    try (Keycloak keycloak = keycloakFactory.baseClient()) {
-                        userResource = keycloak.realm(keycloakFactory.getRealm()).users().get(userId);
-                    }
-                    MappingsRepresentation mappings = userResource.roles().getAll();
-
-                    Stream<String> realmRoleNames = Stream.ofNullable(mappings.getRealmMappings())
-                            .flatMap(List::stream)
-                            .filter(Objects::nonNull)
-                            .map(RoleRepresentation::getName)
-                            .filter(Objects::nonNull);
-
-                    Stream<String> clientRoleNames = Stream.ofNullable(mappings.getClientMappings())
-                            .map(Map::values)
-                            .flatMap(Collection::stream)
-                            .filter(Objects::nonNull)
-                            .map(ClientMappingsRepresentation::getMappings)
-                            .filter(Objects::nonNull)
-                            .flatMap(List::stream)
-                            .filter(Objects::nonNull)
-                            .map(RoleRepresentation::getName)
-                            .filter(Objects::nonNull);
-
-                    return Stream.concat(realmRoleNames, clientRoleNames)
-                            .collect(Collectors.collectingAndThen(
-                                    Collectors.toCollection(LinkedHashSet::new),
-                                    List::copyOf));
-                })
+        return Mono.fromCallable(() -> performGetRoles(userId))
                 .map(ResponseEntity::ok)
                 .onErrorResume(throwable -> {
-                    if (throwable instanceof WebApplicationException wae && wae.getResponse() != null) {
-                        int status = wae.getResponse().getStatus();
-                        return Mono.just(ResponseEntity.status(status).build());
-                    }
-                    return Mono.just(ResponseEntity.internalServerError().build());
+                    log.error("Error getting roles for user: {}", userId, throwable);
+                    return Mono.just(KeycloakExceptionHandler.handleException(throwable));
                 });
     }
 
     @Override
     public Mono<Void> deleteUser(String userId) {
-        return Mono.fromRunnable(() -> {
-            if (userId == null || userId.isBlank()) {
-                throw new WebApplicationException("userId cannot be null or empty");
+        return Mono.defer(() -> {
+            try {
+                performDeleteUser(userId);
+            } catch (Throwable t) {
+                log.error("Error deleting user: {}", userId, t);
             }
-
-            try (Keycloak keycloak = keycloakFactory.baseClient()) {
-                RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
-
-                realmResource.users().get(userId).remove();
-
-            } catch (WebApplicationException wae) {
-                throw wae;
-            } catch (Throwable ex) {
-                throw new WebApplicationException("Error deleting user with id: " + userId, ex);
-            }
+            return Mono.empty();
         });
     }
 
     @Override
     public Mono<ResponseEntity<UpdateUserResponse>> updateUser(UpdateUserRequest request) {
-        return Mono.fromCallable(() -> {
-            if (request.getUserId() == null || request.getUserId().isBlank()) {
-                throw new WebApplicationException("userId cannot be null or empty");
-            }
-
-            try (Keycloak keycloak = keycloakFactory.baseClient()) {
-                RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
-
-                // Retrieve existing user
-                UserRepresentation user = realmResource.users().get(request.getUserId()).toRepresentation();
-                if (user == null) {
-                    return ResponseEntity.notFound().build();
-                }
-
-                // Update fields if they are not null
-                if (request.getEmail() != null) user.setEmail(request.getEmail());
-                if (request.getGivenName() != null) user.setFirstName(request.getGivenName());
-                if (request.getFamilyName() != null) user.setLastName(request.getFamilyName());
-                if (request.getEnabled() != null) user.setEnabled(request.getEnabled());
-                if (request.getAttributes() != null) {
-                    Map<String, List<String>> existingAttributes = user.getAttributes();
-                    if (existingAttributes != null) {
-                        existingAttributes.putAll(request.getAttributes());
-                    } else {
-                        user.setAttributes(request.getAttributes());
-                    }
-                }
-
-                // Perform the update
-                realmResource.users().get(request.getUserId()).update(user);
-
-                // Build response
-                UpdateUserResponse response = new UpdateUserResponse();
-                response.setId(user.getId());
-                response.setUsername(user.getUsername());
-                response.setEmail(user.getEmail());
-                response.setUpdatedAt(Instant.now());
-
-                return ResponseEntity.ok(response);
-
-            } catch (WebApplicationException wae) {
-                throw wae;
-            } catch (Throwable ex) {
-                throw new WebApplicationException("Error updating user with id: " + request.getUserId(), ex);
-            }
-        });
+        return Mono.fromCallable(() -> performUpdateUser(request))
+                .map(ResponseEntity::ok)
+                .onErrorResume(throwable -> {
+                    log.error("Error updating user: {}", request.getUserId(), throwable);
+                    return Mono.just(KeycloakExceptionHandler.handleException(throwable));
+                });
     }
 
     @Override
     public Mono<ResponseEntity<CreateRolesResponse>> createRoles(CreateRolesRequest request) {
-        return Mono.fromCallable(() -> {
-            if (request.getRoleNames() == null || request.getRoleNames().isEmpty()) {
-                throw new WebApplicationException("roleNames cannot be null or empty");
-            }
-
-            List<String> createdRoles = new ArrayList<>();
-
-            try (Keycloak keycloak = keycloakFactory.baseClient()) {
-                RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
-
-                if (request.getContext() != null && !request.getContext().isBlank()) {
-                    // Create roles in a specific client context
-                    ClientResource clientResource = realmResource.clients()
-                            .findByClientId(request.getContext())
-                            .stream()
-                            .findFirst()
-                            .map(clientRep -> realmResource.clients().get(clientRep.getId()))
-                            .orElseThrow(() -> new WebApplicationException("Client not found: " + request.getContext()));
-
-                    for (String roleName : request.getRoleNames()) {
-                        RoleRepresentation role = new RoleRepresentation();
-                        role.setName(roleName);
-                        role.setDescription(request.getDescription());
-                        clientResource.roles().create(role);
-                        createdRoles.add(roleName);
-                    }
-                } else {
-                    // Create roles in the realm
-                    for (String roleName : request.getRoleNames()) {
-                        RoleRepresentation role = new RoleRepresentation();
-                        role.setName(roleName);
-                        role.setDescription(request.getDescription());
-                        realmResource.roles().create(role);
-                        createdRoles.add(roleName);
-                    }
-                }
-
-                CreateRolesResponse response = new CreateRolesResponse();
-                response.setCreatedRoleNames(createdRoles);
-                return ResponseEntity.ok(response);
-
-            } catch (WebApplicationException wae) {
-                throw wae;
-            } catch (Throwable ex) {
-                throw new WebApplicationException("Error creating roles: " + request.getRoleNames(), ex);
-            }
-        });
+        return Mono.fromCallable(() -> performCreateRoles(request))
+                .map(ResponseEntity::ok)
+                .onErrorResume(throwable -> {
+                    log.error("Error creating roles: {}", request.getRoleNames(), throwable);
+                    return Mono.just(KeycloakExceptionHandler.handleException(throwable));
+                });
     }
 
     @Override
     public Mono<ResponseEntity<CreateScopeResponse>> createScope(CreateScopeRequest request) {
-        return Mono.fromCallable(() -> {
-            if (request.getName() == null || request.getName().isBlank()) {
-                throw new WebApplicationException("Scope name cannot be null or empty");
-            }
-
-            try (Keycloak keycloak = keycloakFactory.baseClient()) {
-                RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
-
-                RoleRepresentation scopeRole = new RoleRepresentation();
-                scopeRole.setName(request.getName());
-                scopeRole.setDescription(request.getDescription());
-
-                String scopeId;
-
-                if (request.getContext() != null && !request.getContext().isBlank()) {
-                    // Create scope as a client role
-                    ClientResource clientResource = realmResource.clients()
-                            .findByClientId(request.getContext())
-                            .stream()
-                            .findFirst()
-                            .map(clientRep -> realmResource.clients().get(clientRep.getId()))
-                            .orElseThrow(() -> new WebApplicationException("Client not found: " + request.getContext()));
-
-                    clientResource.roles().create(scopeRole);
-                    scopeId = clientResource.roles().get(request.getName()).toRepresentation().getId();
-                } else {
-                    // Create scope as a realm role
-                    realmResource.roles().create(scopeRole);
-                    scopeId = realmResource.roles().get(request.getName()).toRepresentation().getId();
-                }
-
-                CreateScopeResponse response = new CreateScopeResponse();
-                response.setId(scopeId);
-                response.setName(request.getName());
-                response.setCreatedAt(Instant.now());
-
-                return ResponseEntity.ok(response);
-
-            } catch (WebApplicationException wae) {
-                throw wae;
-            } catch (Throwable ex) {
-                throw new WebApplicationException("Error creating scope: " + request.getName(), ex);
-            }
-        });
+        return Mono.fromCallable(() -> performCreateScope(request))
+                .map(ResponseEntity::ok)
+                .onErrorResume(throwable -> {
+                    log.error("Error creating scope: {}", request.getName(), throwable);
+                    return Mono.just(KeycloakExceptionHandler.handleException(throwable));
+                });
     }
 
     @Override
     public Mono<Void> assignRolesToUser(AssignRolesRequest request) {
-        return Mono.fromRunnable(() -> {
-            if (request.getUserId() == null || request.getUserId().isBlank()) {
-                throw new WebApplicationException("userId cannot be null or empty");
+        return Mono.defer(() -> {
+            try {
+                performAssignRolesToUser(request);
+            } catch (Throwable t) {
+                log.error("Error assigning roles to user: {}", request.getUserId(), t);
             }
-
-            if (request.getRoleNames() == null || request.getRoleNames().isEmpty()) {
-                throw new WebApplicationException("roleNames cannot be null or empty");
-            }
-
-            try (Keycloak keycloak = keycloakFactory.baseClient()) {
-                RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
-
-                UserResource userResource = realmResource.users().get(request.getUserId());
-
-                List<RoleRepresentation> rolesToAssign = new ArrayList<>();
-                for (String roleName : request.getRoleNames()) {
-                    RoleRepresentation role = realmResource.roles().get(roleName).toRepresentation();
-                    if (role != null) {
-                        rolesToAssign.add(role);
-                    } else {
-                        throw new WebApplicationException("Role not found: " + roleName);
-                    }
-                }
-
-                userResource.roles().realmLevel().add(rolesToAssign);
-
-            } catch (WebApplicationException wae) {
-                throw wae;
-            } catch (Throwable ex) {
-                throw new WebApplicationException("Error assigning roles to user: " + request.getUserId(), ex);
-            }
+            return Mono.empty();
         });
     }
 
     @Override
     public Mono<Void> removeRolesFromUser(AssignRolesRequest request) {
-        return Mono.fromRunnable(() -> {
-            if (request.getUserId() == null || request.getUserId().isBlank()) {
-                throw new WebApplicationException("userId cannot be null or empty");
+        return Mono.defer(() -> {
+            try {
+                performRemoveRolesFromUser(request);
+            } catch (Throwable t) {
+                log.error("Error removing roles from user: {}", request.getUserId(), t);
             }
-
-            if (request.getRoleNames() == null || request.getRoleNames().isEmpty()) {
-                throw new WebApplicationException("roleNames cannot be null or empty");
-            }
-
-            try (Keycloak keycloak = keycloakFactory.baseClient()) {
-                RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
-                UserResource userResource = realmResource.users().get(request.getUserId());
-
-                List<RoleRepresentation> rolesToRemove = new ArrayList<>();
-                for (String roleName : request.getRoleNames()) {
-                    RoleRepresentation role = realmResource.roles().get(roleName).toRepresentation();
-                    if (role != null) {
-                        rolesToRemove.add(role);
-                    } else {
-                        throw new WebApplicationException("Role not found: " + roleName);
-                    }
-                }
-
-                userResource.roles().realmLevel().remove(rolesToRemove);
-
-            } catch (WebApplicationException wae) {
-                throw wae;
-            } catch (Throwable ex) {
-                throw new WebApplicationException(
-                        "Error removing roles from user: " + request.getUserId(), ex);
-            }
+            return Mono.empty();
         });
     }
+
+    // Private methods for business logic
+
+    private CreateUserResponse performCreateUser(CreateUserRequest request) {
+        log.debug("Creating user: {}", request.getUsername());
+
+        String userId;
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            UserRepresentation user = new UserRepresentation();
+            user.setUsername(request.getUsername());
+            user.setEmail(request.getEmail());
+            user.setEnabled(true);
+
+            Response response = keycloak.realm(keycloakFactory.getRealm()).users().create(user);
+
+            if (response.getStatus() != 201) {
+                throw new WebApplicationException("Failed to create user", response.getStatus());
+            }
+
+            userId = CreatedResponseUtil.getCreatedId(response);
+
+            CredentialRepresentation credential = new CredentialRepresentation();
+            credential.setType(CredentialRepresentation.PASSWORD);
+            credential.setValue(request.getPassword());
+            credential.setTemporary(false);
+
+            keycloak.realm(keycloakFactory.getRealm())
+                    .users()
+                    .get(userId)
+                    .resetPassword(credential);
+        }
+
+        return new CreateUserResponse(
+                userId,
+                request.getUsername(),
+                request.getEmail(),
+                Instant.now()
+        );
+    }
+
+    private void performChangePassword(ChangePasswordRequest request) {
+        log.debug("Changing password for user: {}", request.getUserId());
+
+        String username = getUsernameById(request.getUserId());
+
+        try (Keycloak passwordKeycloak = keycloakFactory.createPasswordClient(username, request.getOldPassword())) {
+            // Verify old password by getting token
+            AccessTokenResponse tokenResponse = passwordKeycloak.tokenManager().getAccessToken();
+            if (tokenResponse == null || tokenResponse.getToken() == null) {
+                throw new IllegalArgumentException("Old password is incorrect");
+            }
+
+            // Additional validation using TokenService
+            if (tokenService.isTokenExpired(tokenResponse.getToken())) {
+                throw new IllegalArgumentException("Authentication failed - token expired");
+            }
+        }
+
+        // Use admin client to change password
+        try (Keycloak adminKeycloak = keycloakFactory.createClientCredentialsClient()) {
+            CredentialRepresentation newCred = new CredentialRepresentation();
+            newCred.setType(CredentialRepresentation.PASSWORD);
+            newCred.setValue(request.getNewPassword());
+            newCred.setTemporary(false);
+
+            adminKeycloak.realm(keycloakFactory.getRealm())
+                    .users()
+                    .get(request.getUserId())
+                    .resetPassword(newCred);
+        }
+    }
+
+    private String getUsernameById(String userId) {
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            return keycloak.realm(keycloakFactory.getRealm())
+                    .users()
+                    .get(userId)
+                    .toRepresentation()
+                    .getUsername();
+        }
+    }
+
+    private List<SessionInfo> performListSessions(String userId) {
+        log.debug("Listing sessions for user: {}", userId);
+
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
+
+            List<UserSessionRepresentation> userSessions =
+                    realmResource.users().get(userId).getUserSessions();
+
+            return userSessions.stream()
+                    .map(session -> {
+                        SessionInfo info = new SessionInfo();
+                        info.setSessionId(session.getId());
+                        info.setUserId(userId);
+                        info.setCreatedAt(Instant.ofEpochMilli(session.getStart()));
+                        info.setLastAccessAt(Instant.ofEpochMilli(session.getLastAccess()));
+                        info.setIpAddress(session.getIpAddress());
+                        return info;
+                    })
+                    .collect(Collectors.toList());
+        }
+    }
+
+    private void performRevokeSession(String sessionId) {
+        log.debug("Revoking session: {}", sessionId);
+
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new WebApplicationException("SessionId cannot be null or empty");
+        }
+
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
+            realmResource.deleteSession(sessionId, false);
+        }
+    }
+
+    private List<String> performGetRoles(String userId) {
+        log.debug("Getting roles for user: {}", userId);
+
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            UserResource userResource = keycloak.realm(keycloakFactory.getRealm()).users().get(userId);
+            MappingsRepresentation mappings = userResource.roles().getAll();
+
+            Stream<String> realmRoleNames = Stream.ofNullable(mappings.getRealmMappings())
+                    .flatMap(List::stream)
+                    .filter(Objects::nonNull)
+                    .map(RoleRepresentation::getName)
+                    .filter(Objects::nonNull);
+
+            Stream<String> clientRoleNames = Stream.ofNullable(mappings.getClientMappings())
+                    .map(Map::values)
+                    .flatMap(Collection::stream)
+                    .filter(Objects::nonNull)
+                    .map(ClientMappingsRepresentation::getMappings)
+                    .filter(Objects::nonNull)
+                    .flatMap(List::stream)
+                    .filter(Objects::nonNull)
+                    .map(RoleRepresentation::getName)
+                    .filter(Objects::nonNull);
+
+            return Stream.concat(realmRoleNames, clientRoleNames)
+                    .collect(Collectors.collectingAndThen(
+                            Collectors.toCollection(LinkedHashSet::new),
+                            List::copyOf));
+        }
+    }
+
+    private void performDeleteUser(String userId) {
+        log.debug("Deleting user: {}", userId);
+
+        if (userId == null || userId.isBlank()) {
+            throw new WebApplicationException("userId cannot be null or empty");
+        }
+
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
+            realmResource.users().get(userId).remove();
+        }
+    }
+
+    private UpdateUserResponse performUpdateUser(UpdateUserRequest request) {
+        log.debug("Updating user: {}", request.getUserId());
+
+        if (request.getUserId() == null || request.getUserId().isBlank()) {
+            throw new WebApplicationException("userId cannot be null or empty");
+        }
+
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
+
+            // Retrieve existing user
+            UserRepresentation user = realmResource.users().get(request.getUserId()).toRepresentation();
+            if (user == null) {
+                throw new WebApplicationException("User not found", 404);
+            }
+
+            // Update fields if they are not null
+            if (request.getEmail() != null) user.setEmail(request.getEmail());
+            if (request.getGivenName() != null) user.setFirstName(request.getGivenName());
+            if (request.getFamilyName() != null) user.setLastName(request.getFamilyName());
+            if (request.getEnabled() != null) user.setEnabled(request.getEnabled());
+            if (request.getAttributes() != null) {
+                Map<String, List<String>> existingAttributes = user.getAttributes();
+                if (existingAttributes != null) {
+                    existingAttributes.putAll(request.getAttributes());
+                } else {
+                    user.setAttributes(request.getAttributes());
+                }
+            }
+
+            // Perform the update
+            realmResource.users().get(request.getUserId()).update(user);
+
+            // Build response
+            UpdateUserResponse response = new UpdateUserResponse();
+            response.setId(user.getId());
+            response.setUsername(user.getUsername());
+            response.setEmail(user.getEmail());
+            response.setUpdatedAt(Instant.now());
+
+            return response;
+        }
+    }
+
+    private CreateRolesResponse performCreateRoles(CreateRolesRequest request) {
+        log.debug("Creating roles: {}", request.getRoleNames());
+
+        if (request.getRoleNames() == null || request.getRoleNames().isEmpty()) {
+            throw new WebApplicationException("roleNames cannot be null or empty");
+        }
+
+        List<String> createdRoles = new ArrayList<>();
+
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
+
+            if (request.getContext() != null && !request.getContext().isBlank()) {
+                // Create roles in a specific client context
+                ClientResource clientResource = realmResource.clients()
+                        .findByClientId(request.getContext())
+                        .stream()
+                        .findFirst()
+                        .map(clientRep -> realmResource.clients().get(clientRep.getId()))
+                        .orElseThrow(() -> new WebApplicationException("Client not found: " + request.getContext()));
+
+                for (String roleName : request.getRoleNames()) {
+                    RoleRepresentation role = new RoleRepresentation();
+                    role.setName(roleName);
+                    role.setDescription(request.getDescription());
+                    clientResource.roles().create(role);
+                    createdRoles.add(roleName);
+                }
+            } else {
+                // Create roles in the realm
+                for (String roleName : request.getRoleNames()) {
+                    RoleRepresentation role = new RoleRepresentation();
+                    role.setName(roleName);
+                    role.setDescription(request.getDescription());
+                    realmResource.roles().create(role);
+                    createdRoles.add(roleName);
+                }
+            }
+        }
+
+        CreateRolesResponse response = new CreateRolesResponse();
+        response.setCreatedRoleNames(createdRoles);
+        return response;
+    }
+
+    private CreateScopeResponse performCreateScope(CreateScopeRequest request) {
+        log.debug("Creating scope: {}", request.getName());
+
+        if (request.getName() == null || request.getName().isBlank()) {
+            throw new WebApplicationException("Scope name cannot be null or empty");
+        }
+
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
+
+            RoleRepresentation scopeRole = new RoleRepresentation();
+            scopeRole.setName(request.getName());
+            scopeRole.setDescription(request.getDescription());
+
+            String scopeId;
+
+            if (request.getContext() != null && !request.getContext().isBlank()) {
+                // Create scope as a client role
+                ClientResource clientResource = realmResource.clients()
+                        .findByClientId(request.getContext())
+                        .stream()
+                        .findFirst()
+                        .map(clientRep -> realmResource.clients().get(clientRep.getId()))
+                        .orElseThrow(() -> new WebApplicationException("Client not found: " + request.getContext()));
+
+                clientResource.roles().create(scopeRole);
+                scopeId = clientResource.roles().get(request.getName()).toRepresentation().getId();
+            } else {
+                // Create scope as a realm role
+                realmResource.roles().create(scopeRole);
+                scopeId = realmResource.roles().get(request.getName()).toRepresentation().getId();
+            }
+
+            CreateScopeResponse response = new CreateScopeResponse();
+            response.setId(scopeId);
+            response.setName(request.getName());
+            response.setCreatedAt(Instant.now());
+
+            return response;
+        }
+    }
+
+    private void performAssignRolesToUser(AssignRolesRequest request) {
+        log.debug("Assigning roles {} to user: {}", request.getRoleNames(), request.getUserId());
+
+        if (request.getUserId() == null || request.getUserId().isBlank()) {
+            throw new WebApplicationException("userId cannot be null or empty");
+        }
+
+        if (request.getRoleNames() == null || request.getRoleNames().isEmpty()) {
+            throw new WebApplicationException("roleNames cannot be null or empty");
+        }
+
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
+            UserResource userResource = realmResource.users().get(request.getUserId());
+
+            List<RoleRepresentation> rolesToAssign = new ArrayList<>();
+            for (String roleName : request.getRoleNames()) {
+                RoleRepresentation role = realmResource.roles().get(roleName).toRepresentation();
+                if (role != null) {
+                    rolesToAssign.add(role);
+                } else {
+                    throw new WebApplicationException("Role not found: " + roleName);
+                }
+            }
+
+            userResource.roles().realmLevel().add(rolesToAssign);
+        }
+    }
+
+    private void performRemoveRolesFromUser(AssignRolesRequest request) {
+        log.debug("Removing roles {} from user: {}", request.getRoleNames(), request.getUserId());
+
+        if (request.getUserId() == null || request.getUserId().isBlank()) {
+            throw new WebApplicationException("userId cannot be null or empty");
+        }
+
+        if (request.getRoleNames() == null || request.getRoleNames().isEmpty()) {
+            throw new WebApplicationException("roleNames cannot be null or empty");
+        }
+
+        try (Keycloak keycloak = keycloakFactory.createClientCredentialsClient()) {
+            RealmResource realmResource = keycloak.realm(keycloakFactory.getRealm());
+            UserResource userResource = realmResource.users().get(request.getUserId());
+
+            List<RoleRepresentation> rolesToRemove = new ArrayList<>();
+            for (String roleName : request.getRoleNames()) {
+                RoleRepresentation role = realmResource.roles().get(roleName).toRepresentation();
+                if (role != null) {
+                    rolesToRemove.add(role);
+                } else {
+                    throw new WebApplicationException("Role not found: " + roleName);
+                }
+            }
+
+            userResource.roles().realmLevel().remove(rolesToRemove);
+        }
+    }
+
 }

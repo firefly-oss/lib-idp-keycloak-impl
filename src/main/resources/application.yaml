@@ -15,6 +15,18 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+
+keycloak:
+  server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8080}
+  realm: ${KEYCLOAK_REALM:testrealm}
+  client-id: ${KEYCLOAK_CLIENT_ID:myapp-client}
+  client-secret: ${KEYCLOAK_CLIENT_SECRET:iV3i4kBvlNa2tlNb160wvtiSQO9L5qoK}
+  connection-pool-size: ${KEYCLOAK_CONNECTION_POOL_SIZE:10}
+  connection-timeout: ${KEYCLOAK_CONNECTION_TIMEOUT:30000}
+  request-timeout: ${KEYCLOAK_REQUEST_TIMEOUT:60000}
+
 ---
 spring:
   config:
