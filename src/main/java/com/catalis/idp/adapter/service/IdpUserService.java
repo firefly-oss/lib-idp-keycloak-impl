@@ -10,7 +10,7 @@ public interface IdpUserService {
 
     Mono<ResponseEntity<TokenResponse>> refresh(RefreshRequest request);
 
-    Mono<Void> logout(String accessToken);
+    Mono<Void> logout(LogoutRequest request);
 
     Mono<ResponseEntity<IntrospectionResponse>> introspect(String accessToken);
 

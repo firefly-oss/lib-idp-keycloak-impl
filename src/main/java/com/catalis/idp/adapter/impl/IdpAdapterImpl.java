@@ -34,8 +34,8 @@ public class IdpAdapterImpl implements IdpAdapter {
     }
 
     @Override
-    public Mono<Void> logout(String accessToken) {
-        return userService.logout(accessToken);
+    public Mono<Void> logout(LogoutRequest request) {
+        return userService.logout(request);
     }
 
     @Override

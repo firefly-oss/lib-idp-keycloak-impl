@@ -69,12 +69,13 @@ public class KeycloakAPIFactory {
     /**
      * Builds the form body for logout requests. Contains client credentials as required.
      */
-    public MultiValueMap<String, String> logoutBody() {
+    public MultiValueMap<String, String> logoutBody(String refreshToken) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("client_id", properties.clientId());
         if (properties.clientSecret() != null && !properties.clientSecret().isEmpty()) {
             form.add("client_secret", properties.clientSecret());
         }
+        form.add("refresh_token", refreshToken);
         return form;
     }
 

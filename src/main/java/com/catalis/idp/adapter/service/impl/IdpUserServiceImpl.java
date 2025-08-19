@@ -56,13 +56,13 @@ public class IdpUserServiceImpl implements IdpUserService {
     }
 
     @Override
-    public Mono<Void> logout(String accessToken) {
+    public Mono<Void> logout(LogoutRequest request) {
         return keycloakAPIFactory.tokenWebClient()
                 .post()
                 .uri("/logout")
-                .header("Authorization", accessToken)
+                .header("Authorization", request.getAccessToken())
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .body(BodyInserters.fromFormData(keycloakAPIFactory.logoutBody()))
+                .body(BodyInserters.fromFormData(keycloakAPIFactory.logoutBody(request.getRefreshToken())))
                 .retrieve()
                 .toBodilessEntity()
                 .then()

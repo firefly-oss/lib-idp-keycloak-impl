@@ -2,6 +2,7 @@ package com.catalis.idp.adapter.controller;
 
 import com.catalis.idp.adapter.IdpAdapter;
 import com.catalis.idp.dtos.*;
+import lombok.extern.java.Log;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -43,9 +44,9 @@ public class IdpController {
     }
 
     @PostMapping("/logout")
-    public Mono<Void> logout(@RequestHeader("Authorization") String accessToken) {
-        log.info("POST /idp/logout - accessToken={}", mask(accessToken));
-        return idpAdapter.logout(accessToken);
+    public Mono<Void> logout(@RequestBody LogoutRequest request) {
+        log.info("POST /idp/logout - refreshToken={}", mask(request.getRefreshToken()));
+        return idpAdapter.logout(request);
     }
 
     @GetMapping("/introspect")
