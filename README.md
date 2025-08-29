@@ -40,17 +40,17 @@ What this project is not:
 - A replacement for Keycloak server configuration/operations
 
 ## Architecture
-- Ports: Provided by the upstream dependency `com.catalis:lib-idp-adapter` (DTOs and `IdpAdapter` interface)
+- Ports: Provided by the upstream dependency `com.firefly:lib-idp-adapter` (DTOs and `IdpAdapter` interface)
 - Adapter/Implementation: This repository implements `IdpAdapter` using Keycloak Admin Client APIs
 - Transport: HTTP/JSON over Spring WebFlux
 - Config: Strongly-typed via `KeycloakProperties`
 
 Packages of interest:
-- `com.catalis.idp.adapter.controller` — REST controller layer (public API)
-- `com.catalis.idp.adapter.service.*` — user/admin/token services
-- `com.catalis.idp.adapter.keycloak.*` — factories and integration with Keycloak
-- `com.catalis.idp.properties` — Keycloak properties binding
-- `com.catalis.idp.adapter.exception` — exception handling
+- `com.firefly.idp.adapter.controller` — REST controller layer (public API)
+- `com.firefly.idp.adapter.service.*` — user/admin/token services
+- `com.firefly.idp.adapter.keycloak.*` — factories and integration with Keycloak
+- `com.firefly.idp.properties` — Keycloak properties binding
+- `com.firefly.idp.adapter.exception` — exception handling
 
 ## Requirements
 - Java 21+
@@ -127,7 +127,7 @@ Base path: `/idp`
 - POST `/idp/admin/mfa/verify` — Verify MFA challenge
 
 Notes:
-- Request/response DTOs are provided by the upstream `lib-idp-adapter` module (package `com.catalis.idp.dtos`). Consult that module for exact schema.
+- Request/response DTOs are provided by the upstream `lib-idp-adapter` module (package `com.firefly.idp.dtos`). Consult that module for exact schema.
 - Authorization header: Use `Authorization: Bearer <access_token>` where applicable.
 
 ### Examples
@@ -157,7 +157,7 @@ curl -X POST http://localhost:8085/idp/logout \
 
 ## Development Notes
 - Reactive stack: Spring WebFlux
-- DTOs and adapter port come from `com.catalis:lib-idp-adapter`
+- DTOs and adapter port come from `com.firefly:lib-idp-adapter`
 - MapStruct is used for mappings where needed; Lombok reduces boilerplate
 
 ## Troubleshooting
@@ -166,7 +166,7 @@ curl -X POST http://localhost:8085/idp/logout \
 - Connectivity: check `keycloak.server-url` and Keycloak availability
 
 ## Versioning
-- Maven coordinates: `com.catalis:lib-idp-keycloak-impl:1.0.0-SNAPSHOT`
+- Maven coordinates: `com.firefly:lib-idp-keycloak-impl:1.0.0-SNAPSHOT`
 - Java version: 21
 
 ## Contributing

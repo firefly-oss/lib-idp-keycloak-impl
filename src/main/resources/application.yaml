@@ -4,8 +4,8 @@ spring:
     version: 1.0.0
     description: IDP Keycloak Implementation
     team:
-      name: Catalis Development
-      email: dev@catalis.com
+      name: Firefly Software Solutions Inc
+      email: dev@getfirefly.io
 
 server:
   port: 8085
