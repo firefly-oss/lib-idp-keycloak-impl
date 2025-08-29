@@ -1,6 +1,6 @@
-package com.catalis.idp;
+package com.firefly.idp;
 
-import com.catalis.idp.properties.KeycloakProperties;
+import com.firefly.idp.properties.KeycloakProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

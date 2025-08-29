@@ -1,4 +1,4 @@
-package com.catalis.idp.adapter.service;
+package com.firefly.idp.adapter.service;
 
 import org.keycloak.representations.AccessToken;
 

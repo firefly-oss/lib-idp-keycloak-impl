@@ -1,9 +1,9 @@
-package com.catalis.idp.adapter.impl;
+package com.firefly.idp.adapter.impl;
 
-import com.catalis.idp.adapter.IdpAdapter;
-import com.catalis.idp.adapter.service.IdpAdminService;
-import com.catalis.idp.adapter.service.IdpUserService;
-import com.catalis.idp.dtos.*;
+import com.firefly.idp.adapter.IdpAdapter;
+import com.firefly.idp.adapter.service.IdpAdminService;
+import com.firefly.idp.adapter.service.IdpUserService;
+import com.firefly.idp.dtos.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;

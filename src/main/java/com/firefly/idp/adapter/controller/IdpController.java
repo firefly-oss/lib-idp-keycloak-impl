@@ -1,7 +1,7 @@
-package com.catalis.idp.adapter.controller;
+package com.firefly.idp.adapter.controller;
 
-import com.catalis.idp.adapter.IdpAdapter;
-import com.catalis.idp.dtos.*;
+import com.firefly.idp.adapter.IdpAdapter;
+import com.firefly.idp.dtos.*;
 import lombok.extern.java.Log;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

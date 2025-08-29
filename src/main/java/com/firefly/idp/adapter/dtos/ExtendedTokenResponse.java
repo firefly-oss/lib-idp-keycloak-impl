@@ -1,6 +1,6 @@
-package com.catalis.idp.adapter.dtos;
+package com.firefly.idp.adapter.dtos;
 
-import com.catalis.idp.dtos.TokenResponse;
+import com.firefly.idp.dtos.TokenResponse;
 import lombok.Getter;
 import lombok.Setter;
 

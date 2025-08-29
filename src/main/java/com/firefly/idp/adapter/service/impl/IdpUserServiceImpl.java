@@ -1,9 +1,9 @@
-package com.catalis.idp.adapter.service.impl;
+package com.firefly.idp.adapter.service.impl;
 
-import com.catalis.idp.adapter.exception.KeycloakExceptionHandler;
-import com.catalis.idp.adapter.keycloak.KeycloakAPIFactory;
-import com.catalis.idp.adapter.service.IdpUserService;
-import com.catalis.idp.dtos.*;
+import com.firefly.idp.adapter.exception.KeycloakExceptionHandler;
+import com.firefly.idp.adapter.keycloak.KeycloakAPIFactory;
+import com.firefly.idp.adapter.service.IdpUserService;
+import com.firefly.idp.dtos.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;

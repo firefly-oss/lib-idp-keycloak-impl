@@ -1,7 +1,7 @@
-package com.catalis.idp.adapter.keycloak;
+package com.firefly.idp.adapter.keycloak;
 
-import com.catalis.idp.dtos.LoginRequest;
-import com.catalis.idp.properties.KeycloakProperties;
+import com.firefly.idp.dtos.LoginRequest;
+import com.firefly.idp.properties.KeycloakProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.keycloak.OAuth2Constants;
 import org.keycloak.admin.client.Keycloak;

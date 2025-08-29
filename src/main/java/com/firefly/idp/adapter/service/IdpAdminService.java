@@ -1,6 +1,6 @@
-package com.catalis.idp.adapter.service;
+package com.firefly.idp.adapter.service;
 
-import com.catalis.idp.dtos.*;
+import com.firefly.idp.dtos.*;
 import org.springframework.http.ResponseEntity;
 import reactor.core.publisher.Mono;
 

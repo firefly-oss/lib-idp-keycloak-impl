@@ -1,10 +1,10 @@
-package com.catalis.idp.adapter.service.impl;
+package com.firefly.idp.adapter.service.impl;
 
-import com.catalis.idp.adapter.exception.KeycloakExceptionHandler;
-import com.catalis.idp.adapter.keycloak.KeycloakClientFactory;
-import com.catalis.idp.adapter.service.IdpAdminService;
-import com.catalis.idp.adapter.service.TokenService;
-import com.catalis.idp.dtos.*;
+import com.firefly.idp.adapter.exception.KeycloakExceptionHandler;
+import com.firefly.idp.adapter.keycloak.KeycloakClientFactory;
+import com.firefly.idp.adapter.service.IdpAdminService;
+import com.firefly.idp.adapter.service.TokenService;
+import com.firefly.idp.dtos.*;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;

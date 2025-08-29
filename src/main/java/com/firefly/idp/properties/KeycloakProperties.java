@@ -1,4 +1,4 @@
-package com.catalis.idp.properties;
+package com.firefly.idp.properties;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

@@ -1,6 +1,6 @@
-package com.catalis.idp.adapter.service.impl;
+package com.firefly.idp.adapter.service.impl;
 
-import com.catalis.idp.adapter.service.TokenService;
+import com.firefly.idp.adapter.service.TokenService;
 import lombok.extern.slf4j.Slf4j;
 import org.keycloak.TokenVerifier;
 import org.keycloak.common.VerificationException;

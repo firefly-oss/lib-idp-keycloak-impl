@@ -1,4 +1,4 @@
-package com.catalis.idp.adapter.exception;
+package com.firefly.idp.adapter.exception;
 
 import jakarta.ws.rs.WebApplicationException;
 import lombok.extern.slf4j.Slf4j;
