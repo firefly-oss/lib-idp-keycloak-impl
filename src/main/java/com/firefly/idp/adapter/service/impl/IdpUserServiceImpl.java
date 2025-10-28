@@ -74,10 +74,16 @@ public class IdpUserServiceImpl implements IdpUserService {
 
     @Override
     public Mono<Void> logout(LogoutRequest request) {
+        // Ensure proper Bearer token format
+        String authHeader = request.getAccessToken();
+        if (authHeader != null && !authHeader.toLowerCase().startsWith("bearer ")) {
+            authHeader = "Bearer " + authHeader;
+        }
+        
         return keycloakAPIFactory.tokenWebClient()
                 .post()
                 .uri("/logout")
-                .header("Authorization", request.getAccessToken())
+                .header("Authorization", authHeader)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .body(BodyInserters.fromFormData(keycloakAPIFactory.logoutBody(request.getRefreshToken())))
                 .retrieve()
@@ -111,10 +117,16 @@ public class IdpUserServiceImpl implements IdpUserService {
 
     @Override
     public Mono<ResponseEntity<UserInfoResponse>> getUserInfo(String accessToken) {
+        // Ensure proper Bearer token format
+        String authHeader = accessToken;
+        if (authHeader != null && !authHeader.toLowerCase().startsWith("bearer ")) {
+            authHeader = "Bearer " + authHeader;
+        }
+        
         return keycloakAPIFactory.tokenWebClient()
                 .get()
                 .uri("/userinfo")
-                .header("Authorization", "Bearer " + accessToken)
+                .header("Authorization", authHeader)
                 .retrieve()
                 .bodyToMono(UserInfoResponse.class)
                 .map(ResponseEntity::ok)
