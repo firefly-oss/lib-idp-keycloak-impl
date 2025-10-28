@@ -114,7 +114,7 @@ public class IdpUserServiceImpl implements IdpUserService {
         return keycloakAPIFactory.tokenWebClient()
                 .get()
                 .uri("/userinfo")
-                .header("Authorization", accessToken)
+                .header("Authorization", "Bearer " + accessToken)
                 .retrieve()
                 .bodyToMono(UserInfoResponse.class)
                 .map(ResponseEntity::ok)

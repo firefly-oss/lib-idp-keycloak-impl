@@ -207,7 +207,19 @@ public class IdpAdminServiceImpl implements IdpAdminService {
             user.setEmail(request.getEmail());
             user.setEnabled(true);
 
-            Response response = keycloak.realm(keycloakFactory.getRealm()).users().create(user);
+            Map<String, List<String>> userAttributes = new HashMap<>();
+            if (request.getAttributes() != null) {
+                request.getAttributes().forEach((k, v) ->
+                        userAttributes.put(k, List.of(String.valueOf(v))));
+            }
+            if (request.getPartyId() != null) {
+                userAttributes.put("partyId", List.of(request.getPartyId().toString()));
+            }
+            user.setAttributes(userAttributes);
+
+            Response response = keycloak.realm(keycloakFactory.getRealm())
+                    .users()
+                    .create(user);
 
             if (response.getStatus() != 201) {
                 throw new WebApplicationException("Failed to create user", response.getStatus());

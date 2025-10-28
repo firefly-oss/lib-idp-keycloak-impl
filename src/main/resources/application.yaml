@@ -8,7 +8,7 @@ spring:
       email: dev@getfirefly.io
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${SERVER_PORT:8087}
   shutdown: graceful
 
   address: ${SERVER_ADDRESS:localhost}
@@ -21,9 +21,9 @@ logging:
 
 keycloak:
   server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8080}
-  realm: ${KEYCLOAK_REALM:testrealm}
-  client-id: ${KEYCLOAK_CLIENT_ID:myapp-client}
-  client-secret: ${KEYCLOAK_CLIENT_SECRET:iV3i4kBvlNa2tlNb160wvtiSQO9L5qoK}
+  realm: ${KEYCLOAK_REALM:master}
+  client-id: ${KEYCLOAK_CLIENT_ID:firefly_client}
+  client-secret: ${KEYCLOAK_CLIENT_SECRET:UPML4NfnuDh8CWbhJcOrGXqkUjgmuI1o}
   connection-pool-size: ${KEYCLOAK_CONNECTION_POOL_SIZE:10}
   connection-timeout: ${KEYCLOAK_CONNECTION_TIMEOUT:30000}
   request-timeout: ${KEYCLOAK_REQUEST_TIMEOUT:60000}
