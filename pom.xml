@@ -17,7 +17,7 @@
 
     <properties>
         <java.version>21</java.version>
-        <lib-idp-adapter.version>1.0.0-SNAPSHOT</lib-idp-adapter.version>
+        <lib-idp.version>1.0.0-SNAPSHOT</lib-idp.version>
         <org.mapstruct.version>1.5.5.Final</org.mapstruct.version>
         <keycloak.admin.version>26.0.6</keycloak.admin.version>
     </properties>
@@ -26,8 +26,8 @@
     <dependencies>
         <dependency>
             <groupId>com.firefly</groupId>
-            <artifactId>lib-idp-adapter</artifactId>
-            <version>${lib-idp-adapter.version}</version>
+            <artifactId>lib-idp</artifactId>
+            <version>${lib-idp.version}</version>
         </dependency>
 
         <!-- Keycloak admin client -->
